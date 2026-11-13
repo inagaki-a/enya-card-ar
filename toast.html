@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>縁家 名刺AR（乾杯）</title>
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: sans-serif; }
+  #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; background: #f6efe4; color: #5a4632; text-align: center; padding: 24px; }
+  #start button { margin-top: 24px; font-size: 20px; padding: 16px 40px; border: 0; border-radius: 40px;
+                  background: #8a6a45; color: #fff; }
+  #hint { position: fixed; left: 0; right: 0; bottom: 24px; z-index: 5; text-align: center; color: #fff;
+          font-size: 16px; text-shadow: 0 0 4px #000; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="start">
+  <div style="font-size:22px;font-weight:bold;">縁家の名刺をかざしてください</div>
+  <div style="margin-top:12px;font-size:15px;">ボタンを押すとカメラが起動します。<br>映像は端末内で処理され、保存・送信されません。</div>
+  <button id="startBtn">はじめる</button>
+</div>
+<div id="hint">名刺全体が映るようにかざしてください</div>
+
+<a-scene id="scene" mindar-image="imageTargetSrc: ./target.mind; autoStart: false; uiScanning: no; uiLoading: yes;"
+         color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"
+         vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+  <a-assets>
+    <!-- 左半分=カラー / 右半分=アルファ(白=人物)。450x800 を横に並べた 900x800 -->
+    <video id="v" src="./toast.mp4" preload="auto" loop playsinline webkit-playsinline></video>
+  </a-assets>
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+  <!-- 面1・面2どちらをかざしても同じ演出。名刺は幅1 x 高さ0.604（座標の単位は名刺の幅）。 -->
+  <a-entity class="tgt" mindar-image-target="targetIndex: 0">
+    <a-entity class="stage"></a-entity>
+  </a-entity>
+  <a-entity class="tgt" mindar-image-target="targetIndex: 1">
+    <a-entity class="stage"></a-entity>
+  </a-entity>
+</a-scene>
+
+<script>
+/* ================= 調整用の設定 ================= */
+const CFG = {
+  planeW: 0.36,            // 人物の幅（名刺幅=1）
+  planeH: 0.42 * 800/450,  // 縦横比 450:800
+  base:   [0.04, 0.09, 0.01],// 人物の足元（板の中心ではなく板の中心位置）。名刺の下寄りに立たせる
+  tiltX:  15,              // 90=垂直に立つ / 0=名刺に寝かせる。名刺を上から見ても見えるよう少し傾ける
+  // 乾杯のタイミング（動画の秒）。人物がジョッキを掲げた瞬間
+  toasts: [ {t: 3.2}, {t: 9.3} ],
+  approach: 0.7,           // 3Dジョッキが近づく秒数
+  linger: 0.9              // 合わせたあとの秒数
+};
+// 人物のジョッキの位置（動画0.1秒ごと、x,y,w,h は 動画全体に対する 0〜1 の割合。nullは見えない）
+const TRK = [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[0.0,0.146,0.059,0.071],[0.0,0.146,0.059,0.071],[0.0,0.162,0.08,0.077],[0.0,0.176,0.133,0.128],[0.0,0.182,0.181,0.171],[0.025,0.236,0.196,0.17],[0.081,0.283,0.173,0.145],[0.116,0.313,0.16,0.13],[0.14,0.328,0.149,0.122],[0.155,0.334,0.143,0.116],[0.159,0.33,0.141,0.118],[0.152,0.331,0.144,0.118],[0.137,0.333,0.153,0.122],[0.11,0.324,0.17,0.136],[0.063,0.299,0.195,0.155],[0.008,0.261,0.209,0.172],[0.0,0.229,0.147,0.132],[0.0,0.115,0.068,0.087],[0.0,0.093,0.056,0.095],[0.0,0.091,0.056,0.103],null,null,null,null,null,null,null,null,null,null,null,null,null,[0.0,0.058,0.056,0.214],[0.0,0.055,0.056,0.222],[0.0,0.056,0.061,0.226],[0.0,0.057,0.092,0.225],[0.0,0.109,0.121,0.169],[0.0,0.087,0.149,0.191],[0.0,0.141,0.174,0.139],[0.0,0.161,0.202,0.123],[0.002,0.107,0.236,0.194],[0.045,0.179,0.227,0.18],[0.106,0.28,0.187,0.121],[0.149,0.312,0.166,0.118],[0.173,0.31,0.164,0.129],[0.204,0.307,0.167,0.111],[0.24,0.305,0.161,0.103],[0.278,0.317,0.145,0.084],[0.317,0.326,0.122,0.071],[0.321,0.324,0.129,0.071],[0.331,0.325,0.125,0.069],[0.33,0.325,0.125,0.069],[0.324,0.326,0.128,0.069],[0.321,0.329,0.122,0.068],[0.32,0.33,0.119,0.068],[0.319,0.332,0.117,0.066],[0.315,0.334,0.118,0.064],[0.309,0.333,0.116,0.064],[0.304,0.335,0.116,0.063],[0.3,0.337,0.116,0.059],[0.297,0.338,0.118,0.059],[0.294,0.341,0.12,0.055],[0.289,0.337,0.123,0.058],[0.285,0.328,0.128,0.064],[0.278,0.308,0.139,0.081],[0.267,0.28,0.151,0.098],[0.257,0.251,0.162,0.112],[0.249,0.223,0.175,0.124],[0.241,0.201,0.188,0.134],[0.241,0.194,0.192,0.14],[0.262,0.241,0.165,0.123],[0.271,0.266,0.166,0.115],[0.28,0.281,0.165,0.113],[0.282,0.287,0.166,0.113],[0.278,0.289,0.164,0.114],[0.271,0.284,0.162,0.117],[0.263,0.282,0.164,0.117],[0.259,0.282,0.164,0.116],[0.261,0.281,0.161,0.117],[0.26,0.279,0.162,0.117],[0.262,0.278,0.162,0.116],[0.262,0.278,0.164,0.116],[0.267,0.278,0.159,0.116],[0.27,0.279,0.159,0.116],[0.27,0.279,0.16,0.115],[0.269,0.278,0.16,0.116],[0.268,0.278,0.158,0.115]];
+const TRK_DT = 0.1;
+/* ================================================== */
+
+const video = document.getElementById('v');
+const scene = document.getElementById('scene');
+let audioCtx = null;
+
+/* ---- カラー＋アルファ(左右並び)を合成して透過表示するシェーダ ---- */
+AFRAME.registerComponent('alpha-video', {
+  init() {
+    const tex = new THREE.VideoTexture(video);
+    tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    tex.colorSpace = THREE.NoColorSpace;   // 動画の値をそのまま使う
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: tex } },
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader: 'uniform sampler2D map; varying vec2 vUv;' +
+        'void main(){ vec3 c=texture2D(map, vec2(vUv.x*0.5, vUv.y)).rgb;' +
+        ' float a=texture2D(map, vec2(0.5+vUv.x*0.5, vUv.y)).r;' +
+        ' a=smoothstep(0.02,0.98,a); if(a<0.003) discard; gl_FragColor=vec4(c,a); }'
+    });
+    this.el.getObject3D('mesh') ? (this.el.getObject3D('mesh').material = mat)
+                                : this.el.addEventListener('object3dset', () => { this.el.getObject3D('mesh').material = mat; });
+    this.mat = mat;
+  }
+});
+
+/* ---- 3Dジョッキ（簡易モデル）。人物のジョッキに合わせて動く ---- */
+function trkAt(t) {
+  const f = t / TRK_DT, i = Math.floor(f), k = f - i;
+  const a = TRK[Math.min(i, TRK.length - 1)], b = TRK[Math.min(i + 1, TRK.length - 1)];
+  if (!a && !b) return null;
+  if (!a) return b; if (!b) return a;
+  return a.map((v, j) => v + (b[j] - v) * k);
+}
+const ease = x => x * x * (3 - 2 * x);
+
+AFRAME.registerComponent('toast-mug', {
+  init() {
+    const el = this.el;
+    // ジョッキ（高さ0.20、ガラス＋ビール＋泡＋取っ手）
+    const g = document.createElement('a-entity'); this.g = g;
+    g.setAttribute('visible', false);
+    g.innerHTML =
+      '<a-cylinder radius="0.050" height="0.135" position="0 -0.012 0" material="shader:flat; color:#d98200; opacity:1; transparent:true; depthWrite:false"></a-cylinder>' +
+      '<a-cylinder radius="0.052" height="0.032" position="0 0.068 0" material="shader:flat; color:#fffdf5; opacity:1; transparent:true; depthWrite:false"></a-cylinder>' +
+      '<a-cylinder radius="0.058" height="0.17" position="0 0 0" material="shader:flat; color:#dff0ff; opacity:0.16; transparent:true; depthWrite:false; side:double"></a-cylinder>' +
+      '<a-cylinder radius="0.060" height="0.012" position="0 -0.083 0" material="shader:flat; color:#ffffff; opacity:0.55; transparent:true; depthWrite:false"></a-cylinder>' +
+      '<a-torus radius="0.034" radius-tubular="0.007" position="-0.078 0 0" scale="0.9 1.3 1" material="shader:flat; color:#f4faff; opacity:0.6; transparent:true; depthWrite:false"></a-torus>';
+    el.appendChild(g);
+    // 乾杯のきらめき
+    const sp = document.createElement('a-entity'); this.sp = sp; sp.setAttribute('visible', false);
+    for (let i = 0; i < 8; i++) {
+      const s = document.createElement('a-sphere');
+      s.setAttribute('radius', 0.007);
+      s.setAttribute('material', 'shader:flat; color:#fff3b0; opacity:0.95; transparent:true');
+      sp.appendChild(s);
+    }
+    el.appendChild(sp);
+    this.clinked = -1;
+  },
+  tick() {
+    const t = video.currentTime, g = this.g, sp = this.sp;
+    let on = false;
+    for (let n = 0; n < CFG.toasts.length; n++) {
+      const T = CFG.toasts[n].t, a = T - CFG.approach, b = T + CFG.linger;
+      if (t < a || t > b) continue;
+      const m = trkAt(T) ? trkAt(Math.min(Math.max(t, 0), T + 0.4)) || trkAt(T) : null;
+      if (!m) continue;
+      const mx = (m[0] + m[2] / 2 - 0.5) * CFG.planeW, my = (0.5 - (m[1] + m[3] / 2)) * CFG.planeH;
+      const mw = m[2] * CFG.planeW, mh = m[3] * CFG.planeH;
+      const sc = Math.min(Math.max(mh * 1.1 / 0.17, 0.45), 1.8);      // 動画のジョッキの大きさに合わせる
+      let p = t < T ? ease((t - a) / CFG.approach) : 1;       // 近づく
+      let leave = t > T + 0.5 ? ease((t - T - 0.5) / (CFG.linger - 0.5)) : 0; // 離れる
+      const reach = 0.5 * mw + 0.058 * sc * 0.95;              // 接する距離（ジョッキ同士の側面が触れる）
+      const dx = -(reach + (1 - p) * 0.30 + leave * 0.30);
+      const dy = 0.02 - (1 - p) * 0.10 - leave * 0.05 + (t > T ? 0.012 * Math.sin((t - T) * 14) * Math.max(0, 1 - (t - T) * 3) : 0);
+      g.object3D.position.set(mx + dx, my + dy, 0.05);
+      g.object3D.rotation.set(THREE.MathUtils.degToRad(12 - CFG.tiltX), 0, THREE.MathUtils.degToRad(-14 * (1 - p * 0.6))); // 板の傾きを打ち消して正面から見る
+      g.object3D.scale.set(sc, sc, sc);
+      g.setAttribute('visible', true); on = true;
+      const op = Math.min(1, (t - a) / 0.2) * (1 - leave);
+      g.object3D.traverse(o => { if (o.material && o.userData.op === undefined) o.userData.op = o.material.opacity; });
+      g.object3D.traverse(o => { if (o.material) { o.material.opacity = o.userData.op * op; o.material.transparent = true; } });
+      // カチン
+      const c = t - T;
+      if (c >= 0 && c < 0.6) {
+        if (this.clinked !== n) { this.clinked = n; clink(); }
+        sp.object3D.position.set(mx - 0.5 * mw, my + 0.02, 0.05);
+        sp.object3D.scale.set(sc, sc, sc);
+        sp.setAttribute('visible', true);
+        const r = 0.04 + c * 0.22, fade = 1 - c / 0.6;
+        Array.from(sp.children).forEach((s, i) => {
+          const ang = i / 8 * Math.PI * 2 + 0.4;
+          s.object3D.position.set(Math.cos(ang) * r, Math.sin(ang) * r, 0);
+          s.object3D.scale.setScalar(0.6 + fade);
+          const mm = s.getObject3D('mesh'); if (mm) { mm.material.opacity = fade; mm.material.transparent = true; }
+        });
+      } else sp.setAttribute('visible', false);
+    }
+    if (!on) { g.setAttribute('visible', false); sp.setAttribute('visible', false); this.clinked = -1; }
+  }
+});
+
+/* ---- 小さな「カチン」音（WebAudioで合成。上品に小さめ） ---- */
+function clink() {
+  if (!audioCtx || video.paused) return;
+  const t0 = audioCtx.currentTime;
+  [[2350, 0.10], [3520, 0.06], [5180, 0.03]].forEach(([f, v]) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
+    o.connect(g).connect(audioCtx.destination); o.start(t0); o.stop(t0 + 0.5);
+  });
+}
+
+/* ---- 立たせる板を各ターゲットに作る ---- */
+document.querySelectorAll('.stage').forEach(stage => {
+  stage.setAttribute('position', CFG.base.join(' '));
+  stage.setAttribute('rotation', CFG.tiltX + ' 0 0');
+  const plane = document.createElement('a-plane');
+  plane.setAttribute('width', CFG.planeW); plane.setAttribute('height', CFG.planeH);
+  plane.setAttribute('position', '0 ' + (CFG.planeH / 2) + ' 0');  // 足元が名刺の上
+  plane.setAttribute('alpha-video', '');
+  stage.appendChild(plane);
+  const holder = document.createElement('a-entity');
+  holder.setAttribute('position', '0 ' + (CFG.planeH / 2) + ' 0');
+  holder.setAttribute('toast-mug', '');
+  stage.appendChild(holder);
+});
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('start').style.display = 'none';
+  video.muted = false;
+  video.play().then(() => video.pause()).catch(() => {}); // タップ操作中に再生権限を得る
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {}
+  scene.systems['mindar-image-system'].start();
+});
+document.querySelectorAll('.tgt').forEach(t => {
+  t.addEventListener('targetFound', () => { video.play(); document.getElementById('hint').style.display = 'none'; });
+  t.addEventListener('targetLost',  () => { video.pause(); document.getElementById('hint').style.display = 'block'; });
+});
+</script>
+</body>
+</html>
