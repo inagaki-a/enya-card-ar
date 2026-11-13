@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>縁家 名刺AR</title>
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; font-family: sans-serif; }
+  #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; background: #f6efe4; color: #5a4632; text-align: center; padding: 24px; }
+  #start button { margin-top: 24px; font-size: 20px; padding: 16px 40px; border: 0; border-radius: 40px;
+                  background: #8a6a45; color: #fff; }
+  #hint { position: fixed; left: 0; right: 0; bottom: 24px; z-index: 5; text-align: center; color: #fff;
+          font-size: 16px; text-shadow: 0 0 4px #000; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="start">
+  <div style="font-size:22px;font-weight:bold;">縁家の名刺をかざしてください</div>
+  <div style="margin-top:12px;font-size:15px;">ボタンを押すとカメラが起動します。<br>映像は端末内で処理され、保存・送信されません。</div>
+  <button id="startBtn">はじめる</button>
+</div>
+<div id="hint">名刺全体が映るようにかざしてください</div>
+
+<a-scene id="scene" mindar-image="imageTargetSrc: ./target.mind; autoStart: false; uiScanning: no; uiLoading: yes;"
+         color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"
+         vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+  <a-assets>
+    <video id="v" src="./video.mp4" preload="auto" loop playsinline webkit-playsinline></video>
+  </a-assets>
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+  <!-- 面1（縁家グループホーム）・面2（pu-a-pu）どちらをかざしても同じ動画が流れます -->
+  <!-- 動画の大きさ・位置はここで調整（縦動画 406x720 の比率） -->
+  <a-entity class="tgt" mindar-image-target="targetIndex: 0">
+    <a-video src="#v" width="0.8" height="1.42" position="0 0 0.01"></a-video>
+  </a-entity>
+  <a-entity class="tgt" mindar-image-target="targetIndex: 1">
+    <a-video src="#v" width="0.8" height="1.42" position="0 0 0.01"></a-video>
+  </a-entity>
+</a-scene>
+
+<script>
+  const video = document.getElementById('v');
+  const scene = document.getElementById('scene');
+  document.getElementById('startBtn').addEventListener('click', () => {
+    document.getElementById('start').style.display = 'none';
+    video.muted = false;
+    video.play().then(() => video.pause()).catch(() => {}); // タップ操作中に再生権限を得る
+    scene.systems['mindar-image-system'].start();
+  });
+  document.querySelectorAll('.tgt').forEach(t => {
+    t.addEventListener('targetFound', () => { video.play(); document.getElementById('hint').style.display = 'none'; });
+    t.addEventListener('targetLost',  () => { video.pause(); document.getElementById('hint').style.display = 'block'; });
+  });
+</script>
+</body>
+</html>
