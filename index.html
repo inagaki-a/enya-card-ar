@@ -12,6 +12,11 @@
            align-items: center; justify-content: center; background: #f6efe4; color: #5a4632; text-align: center; padding: 24px; }
   #start button { margin-top: 24px; font-size: 20px; padding: 16px 40px; border: 0; border-radius: 40px;
                   background: #8a6a45; color: #fff; }
+  #err { position: fixed; inset: 0; z-index: 2147483000; display: none; flex-direction: column; align-items: center; justify-content: center;
+         background: #f6efe4; color: #5a4632; text-align: center; padding: 28px; line-height: 1.8; font-size: 16px; }
+  #err b { font-size: 20px; display: block; margin-bottom: 10px; }
+  #err button { margin-top: 20px; font-size: 18px; padding: 14px 34px; border: 0; border-radius: 40px; background: #8a6a45; color: #fff; }
+  #inapp { display: none; margin-top: 18px; padding: 12px 14px; border-radius: 10px; background: #fff3d6; font-size: 14px; line-height: 1.7; text-align: left; }
   #hint { position: fixed; left: 0; right: 0; bottom: 24px; z-index: 5; text-align: center; color: #fff;
           font-size: 16px; text-shadow: 0 0 4px #000; pointer-events: none; }
 </style>
@@ -21,7 +26,9 @@
   <div style="font-size:22px;font-weight:bold;">縁家の名刺をかざしてください</div>
   <div style="margin-top:12px;font-size:15px;">ボタンを押すとカメラが起動します。<br>映像は端末内で処理され、保存・送信されません。</div>
   <button id="startBtn">はじめる</button>
+  <div id="inapp"><b>⚠ このままではカメラが使えない場合があります</b><br>LINE・Instagramなどのアプリ内で開いています。画面右上（または右下）のメニューから<b>「Safariで開く」「ブラウザで開く」「Chromeで開く」</b>を選んで開き直してください。</div>
 </div>
+<div id="err"><div id="errBody"></div><button onclick="location.reload()">もう一度やり直す</button></div>
 <div id="hint">名刺全体が映るようにかざしてください</div>
 
 <a-scene id="scene" mindar-image="imageTargetSrc: ./target.mind; autoStart: false; uiScanning: no; uiLoading: yes;"
@@ -42,10 +49,36 @@
 </a-scene>
 
 <script>
+  // ---- カメラが使えないとき、白い画面のまま止まらないように理由を表示する ----
+  function showErr(title, body) {
+    document.getElementById('errBody').innerHTML = '<b>' + title + '</b>' + body;
+    document.getElementById('err').style.display = 'flex';
+  }
+  const inApp = /Line\/|FBAN|FBAV|Instagram|MicroMessenger|Twitter|KAKAOTALK|Messenger/i.test(navigator.userAgent);
+  if (inApp) document.getElementById('inapp').style.display = 'block';
+  function cameraHelp(name) {
+    if (name === 'NotAllowedError' || name === 'SecurityError')
+      return ['カメラの使用が許可されていません', 'スマホの設定で、このページ（ブラウザ）のカメラを「許可」にしてから、もう一度やり直してください。<br>iPhone：設定 → Safari → カメラ → 許可<br>Android：ブラウザのアドレス欄の鍵マーク → 権限 → カメラ → 許可'];
+    if (name === 'NotFoundError' || name === 'OverconstrainedError')
+      return ['カメラが見つかりません', 'カメラのある端末（スマホ）で開いてください。'];
+    return ['カメラを起動できませんでした', 'LINE・Instagramなどのアプリ内ではなく、<b>Safari（iPhone）／Chrome（Android）</b>で開き直してください。<br>他のアプリがカメラを使っていないかも確認してください。'];
+  }
+  window.addEventListener('load', () => {
+    document.getElementById('scene').addEventListener('arError', (e) => {
+      const n = (e && e.detail && e.detail.error && (e.detail.error.name || e.detail.error.message)) || '';
+      const h = cameraHelp(n); showErr(h[0], h[1]);
+    });
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const h = cameraHelp((e.reason && e.reason.name) || ''); showErr(h[0], h[1]);
+  });
   const video = document.getElementById('v');
   const scene = document.getElementById('scene');
   document.getElementById('startBtn').addEventListener('click', () => {
     document.getElementById('start').style.display = 'none';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showErr('この表示方法ではカメラを使えません', 'LINE・Instagramなどのアプリ内ではなく、<b>Safari（iPhone）／Chrome（Android）</b>で開き直してください。'); return;
+    }
     video.muted = false;
     video.play().then(() => video.pause()).catch(() => {}); // タップ操作中に再生権限を得る
     scene.systems['mindar-image-system'].start();
