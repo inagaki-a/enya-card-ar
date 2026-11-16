@@ -72,6 +72,31 @@
   window.addEventListener('unhandledrejection', (e) => {
     const h = cameraHelp((e.reason && e.reason.name) || ''); showErr(h[0], h[1]);
   });
+
+  // ---- ?debug=1 のときだけ、動作の段階を画面上部に表示（原因調査用）----
+  if (/[?&]debug=1/.test(location.search)) {
+    const d = document.createElement('pre');
+    d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;margin:0;padding:6px;background:rgba(0,0,0,.75);color:#7CFC00;font-size:11px;line-height:1.4;white-space:pre-wrap;max-height:55%;overflow:auto;pointer-events:none';
+    document.body.appendChild(d);
+    const t0 = Date.now(); const L = m => { d.textContent += ((Date.now() - t0) / 1000).toFixed(1) + 's ' + m + String.fromCharCode(10); };
+    L('debug start / ' + navigator.userAgent.slice(0, 90));
+    window.addEventListener('error', e => L('ERROR ' + e.message));
+    window.addEventListener('unhandledrejection', e => L('REJECT ' + (e.reason && (e.reason.name + ' ' + e.reason.message))));
+    window.addEventListener('load', () => {
+      L('load完了 AFRAME=' + (typeof AFRAME) + ' MINDAR=' + (typeof MINDAR));
+      const sc = document.getElementById('scene');
+      ['loaded', 'arReady', 'arError', 'renderstart'].forEach(n => sc.addEventListener(n, () => L('scene:' + n)));
+      document.getElementById('startBtn').addEventListener('click', () => {
+        L('はじめる押下');
+        let n = 0; const iv = setInterval(() => {
+          const v = Array.from(document.querySelectorAll('video')).find(x => x.id !== 'v');
+          L('camera video: ' + (v ? v.videoWidth + 'x' + v.videoHeight + ' paused=' + v.paused + ' ready=' + v.readyState : 'なし'));
+          if (++n >= 8) clearInterval(iv);
+        }, 2000);
+      });
+      document.querySelectorAll('.tgt').forEach((t, i) => { t.addEventListener('targetFound', () => L('FOUND ' + i)); t.addEventListener('targetLost', () => L('LOST ' + i)); });
+    });
+  }
   const video = document.getElementById('v');
   const scene = document.getElementById('scene');
   document.getElementById('startBtn').addEventListener('click', () => {
